@@ -210,6 +210,7 @@
                             ws = pyhf.Workspace(spec)
                             {'channels': ws.channels, 'samples': ws.samples, 'modifiers': ws.modifiers}
                         `);
+                        delete window.spec;
                         this.setState({results: result.toJs(), msg: `Results for ${this.state.selectedFile.name}`, progress: false});
                   });
                 }
@@ -245,6 +246,7 @@
                             result = pyhf.infer.hypotest(1.0, data, model, return_expected_set=True)
                             {'CLs_obs': [tensorlib.tolist(result[0])], 'CLs_exp': [tensorlib.tolist(tensor) for tensor in result[-1]]}
                         `);
+                        delete window.spec;
                         this.setState({results: result.toJs(), msg: `Results for ${this.state.selectedFile.name}`, progress: false});
                   });
                 }
