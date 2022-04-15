@@ -354,7 +354,7 @@
                                                 helperText="e.g. 12.5"
                                                 variant="filled"
                                                 autoFocus={true}
-                                                onInput={(e) => this.setState({uncert: Math.max(e.target.min, e.target.value)})}
+                                                onInput={(e) => this.setState({observed: Math.max(e.target.min, e.target.value)})}
                                                 sx={{flexGrow: 3, m: 1}}
                                                 value={this.state.observed}
                                                 inputProps={{ min: 0 }}
