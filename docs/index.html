@@ -3,14 +3,15 @@
         <meta charset="utf-8" name="viewport" content="initial-scale=1, width=device-width"/>
         <script src="https://cdn.jsdelivr.net/pyodide/v0.20.0/full/pyodide.js" crossorigin></script>
         <!-- Production -->
+        <!-- Development
         <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
         <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
         <script src="https://unpkg.com/@mui/material@v5.6.1/umd/material-ui.production.min.js" crossorigin></script>
-        <!-- Development
+        -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.7.2/prop-types.min.js" integrity="sha512-ssNhh7jlzc+K93ckIlSXFHHz6fSFv0l619WOv8xbFNRbFOujbasb42LVMOggDrQR1ScJncoWb+KAJx1uF3ipjw==" crossorigin="anonymous"></script>
         <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
         <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
         <script src="https://unpkg.com/@mui/material@v5.6.1/umd/material-ui.development.js" crossorigin></script>
-        ->
 
         <!-- Can remove this for a pre-processor -->
         <script src="https://unpkg.com/babel-standalone@6/babel.min.js" crossorigin></script>
@@ -127,6 +128,39 @@
                 );
             }
 
+            function a11yPropsTab(index) {
+              return {
+                id: `simple-tab-${index}`,
+                'aria-controls': `simple-tabpanel-${index}`,
+              };
+            }
+
+            function TabPanel(props) {
+              const { children, value, index, ...other } = props;
+
+              return (
+                <div
+                  role="tabpanel"
+                  hidden={value !== index}
+                  id={`simple-tabpanel-${index}`}
+                  aria-labelledby={`simple-tab-${index}`}
+                  {...other}
+                >
+                  {value === index && (
+                    <MaterialUI.Box sx={{ p: 3 }}>
+                      {children}
+                    </MaterialUI.Box>
+                  )}
+                </div>
+              );
+            }
+
+            TabPanel.propTypes = {
+              children: PropTypes.node,
+              index: PropTypes.number.isRequired,
+              value: PropTypes.number.isRequired,
+            };
+
             class App extends React.Component {
                 constructor(props) {
                     super(props);
@@ -135,6 +169,7 @@
                         selectedFile: null,
                         msg: DEFAULT_MSG,
                         progress: false,
+                        tab: "uploadFile",
                     };
                 }
 
@@ -174,36 +209,55 @@
                 render() {
                     return (
                         <MyThemeProvider>
-                        <MaterialUI.CssBaseline />
+                            <MaterialUI.CssBaseline />
                             <MaterialUI.Box>
-                            <Heading />
-                            <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
-                                <MaterialUI.Button
-                                  variant="contained"
-                                  component="label"
-                                  disabled={this.state.progress}
-                                >
-                                  Upload File
-                                  <input
-                                    type="file"
-                                    onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
-                                    hidden
-                                  />
-                                </MaterialUI.Button>
-                                <MaterialUI.Typography variant="body1" component="div" sx={{flexGrow: 2}}>
-                                    {this.state.selectedFile ? this.state.selectedFile.name : 'Select a file to get started.'}
-                                </MaterialUI.Typography>
-                                <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
-                            </MaterialUI.Stack>
-                            <MaterialUI.Paper elevation={3}>
-                                <MaterialUI.Box sx={{ p: 2 }}>
-                                    <MaterialUI.Typography variant="body1" component="div">
-                                        {this.state.msg}
-                                    </MaterialUI.Typography>
-                                    {this.state.progress && <MaterialUI.LinearProgress />}
-                                </MaterialUI.Box>
-                              <Results results={this.state.results} />
-                            </MaterialUI.Paper>
+                                <Heading />
+                                <MaterialUI.Grid container>
+                                    <MaterialUI.Grid item xs={12}>
+                                        <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
+                                            <MaterialUI.Tabs sx={{flexGrow: 2}} value={this.state.tab} onChange={(e, v) => {this.setState({tab: v})}} aria-label="basic tabs example">
+                                              <MaterialUI.Tab label="Workspace File" value="uploadFile" />
+                                              <MaterialUI.Tab label="Simple Models" value="simpleModel" disabled />
+                                              <MaterialUI.Tab label="Text Input" value="textInput" disabled />
+                                            </MaterialUI.Tabs>
+                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
+                                        </MaterialUI.Stack>
+                                    </MaterialUI.Grid>
+                                    <MaterialUI.Grid item xs={12}>
+                                        <TabPanel value={this.state.tab} index="uploadFile">
+                                            <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
+                                                <MaterialUI.Button
+                                                  variant="contained"
+                                                  component="label"
+                                                  disabled={this.state.progress}
+                                                >
+                                                  Upload File
+                                                  <input
+                                                    type="file"
+                                                    onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
+                                                    hidden
+                                                  />
+                                                </MaterialUI.Button>
+                                                <MaterialUI.Typography variant="body1" component="div" sx={{flexGrow: 2}}>
+                                                    {this.state.selectedFile ? this.state.selectedFile.name : 'Select a file to get started.'}
+                                                </MaterialUI.Typography>
+                                            </MaterialUI.Stack>
+                                        </TabPanel>
+                                        <TabPanel value={this.state.tab} index="simpleModel">Simple Model</TabPanel>
+                                        <TabPanel value={this.state.tab} index="textInput">Text Input</TabPanel>
+                                    </MaterialUI.Grid>
+                                    <MaterialUI.Grid item xs={12}>
+                                        <MaterialUI.Paper elevation={3}>
+                                            <MaterialUI.Box sx={{ p: 2 }}>
+                                                <MaterialUI.Typography variant="body1" component="div">
+                                                    {this.state.msg}
+                                                </MaterialUI.Typography>
+                                                {this.state.progress && <MaterialUI.LinearProgress />}
+                                            </MaterialUI.Box>
+                                          <Results results={this.state.results} />
+                                        </MaterialUI.Paper>
+                                    </MaterialUI.Grid>
+                                </MaterialUI.Grid>
                             </MaterialUI.Box>
                         </MyThemeProvider>
                     );
