@@ -107,6 +107,26 @@
                 return pyodide;
             }
 
+            function MyThemeProvider(props) {
+                const prefersDarkMode = MaterialUI.useMediaQuery('(prefers-color-scheme: dark)');
+
+                const theme = React.useMemo(
+                  () =>
+                    MaterialUI.createTheme({
+                      palette: {
+                        mode: prefersDarkMode ? 'dark' : 'light',
+                      },
+                    }),
+                  [prefersDarkMode],
+                );
+
+                return (
+                    <MaterialUI.ThemeProvider theme={theme}>
+                        {props.children}
+                    </MaterialUI.ThemeProvider>
+                );
+            }
+
             class App extends React.Component {
                 constructor(props) {
                     super(props);
@@ -153,40 +173,46 @@
 
                 render() {
                     return (
-                        <MaterialUI.Box>
-                        <Heading />
-                        <MaterialUI.Stack direction="row" spacing={2} alignItems="top" sx={{ m: 1, mb: 3 }} >
-                            <MaterialUI.Button
-                              variant="contained"
-                              component="label"
-                              sx={{flexGrow: 1}}
-                              disabled={this.state.progress}
-                            >
-                              Upload File
-                              <input
-                                type="file"
-                                onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
-                                hidden
-                              />
-                            </MaterialUI.Button>
-                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
-                        </MaterialUI.Stack>
-                        <MaterialUI.Paper elevation={3}>
-                            <MaterialUI.Box sx={{ p: 2 }}>
-                                <MaterialUI.Typography variant="body1" component="div">
-                                    {this.state.msg}
+                        <MyThemeProvider>
+                        <MaterialUI.CssBaseline />
+                            <MaterialUI.Box>
+                            <Heading />
+                            <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
+                                <MaterialUI.Button
+                                  variant="contained"
+                                  component="label"
+                                  disabled={this.state.progress}
+                                >
+                                  Upload File
+                                  <input
+                                    type="file"
+                                    onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
+                                    hidden
+                                  />
+                                </MaterialUI.Button>
+                                <MaterialUI.Typography variant="body1" component="div" sx={{flexGrow: 2}}>
+                                    {this.state.selectedFile ? this.state.selectedFile.name : 'Select a file to get started.'}
                                 </MaterialUI.Typography>
-                                {this.state.progress && <MaterialUI.LinearProgress />}
+                                <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
+                            </MaterialUI.Stack>
+                            <MaterialUI.Paper elevation={3}>
+                                <MaterialUI.Box sx={{ p: 2 }}>
+                                    <MaterialUI.Typography variant="body1" component="div">
+                                        {this.state.msg}
+                                    </MaterialUI.Typography>
+                                    {this.state.progress && <MaterialUI.LinearProgress />}
+                                </MaterialUI.Box>
+                              <Results results={this.state.results} />
+                            </MaterialUI.Paper>
                             </MaterialUI.Box>
-                          <Results results={this.state.results} />
-                        </MaterialUI.Paper>
-                        </MaterialUI.Box>
+                        </MyThemeProvider>
                     );
                 }
             }
 
             function main() {
                 const root = ReactDOM.createRoot(document.getElementById('root'));
+
                 root.render(<App />);
             }
 
