@@ -282,6 +282,21 @@
 
 
                 render() {
+                    let icon_close = ''
+                    if(this.state.selectedFile){
+                        icon_close = (
+                          <MaterialUI.IconButton
+                              aria-label="close"
+                              onClick={() => {this.setState({selectedFile: null, spec: null, msg: `Deleted ${this.state.selectedFile.name}`})}}
+                              sx={{
+                                  color: (theme) => theme.palette.grey[500],
+                              }}
+                          >
+                              <MaterialUI.Icon>close</MaterialUI.Icon>
+                          </MaterialUI.IconButton>
+                        )
+                    }
+
                     return (
                         <MyThemeProvider>
                             <MaterialUI.CssBaseline />
@@ -304,8 +319,9 @@
                                         <TabPanel value={this.state.tab} index="uploadFile">
                                             <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
                                                 <MaterialUI.Button variant="contained" component="label" disabled={this.state.progress}>
-                                                  Upload File <input type="file" onChange={this.handleFileChange} hidden />
+                                                  Upload File <input type="file" onChange={this.handleFileChange} value={!this.state.selectedFile ? '' : null} hidden />
                                                 </MaterialUI.Button>
+                                                {icon_close}
                                                 <MaterialUI.Typography variant="body1" component="div" sx={{flexGrow: 2}}>
                                                     {this.state.selectedFile ? this.state.selectedFile.name : 'Select a file to get started.'}
                                                 </MaterialUI.Typography>
