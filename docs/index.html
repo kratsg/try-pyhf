@@ -42,46 +42,45 @@
 
             function Results(props) {
                 const output = [];
-                for (const key in props.results) {
-                    const inner_results = props.results[key];
-                    const results_components = inner_results.map(result => {
-                        const details = result.state === false ? <span dangerouslySetInnerHTML={{__html: result.err_msg }} />: null;
-                        const color = result.state === false ? 'error' : (result.state === true ?  'success' : 'warning');
-                        const icon = <MaterialUI.Icon color={color}>{result.state === false ? 'error' : (result.state === true ? 'check_circle' : 'warning' )}</MaterialUI.Icon>;
+
+                props.results.forEach((value, name) => {
+                    const results_components = value.map(result => {
+                        const icon = <MaterialUI.Icon>{name == 'channels' ? 'looks_one' : (name == 'samples' ? 'looks_two' : 'looks_3')}</MaterialUI.Icon>;
                         const msg = (
-                            <React.Fragment>
-                                <MaterialUI.Typography
-                                    sx={{ display: 'inline' }}
-                                    component="span"
-                                    variant="body2"
-                                    color="text.primary"
-                                >
-                                    {result.name + ": "}
-                                </MaterialUI.Typography>
-                                {result.description}
-                            </React.Fragment>
+                          <React.Fragment>
+                              <MaterialUI.Typography
+                                  sx={{ display: 'inline' }}
+                                  component="span"
+                                  variant="body2"
+                                  color="text.primary"
+                              >
+                                  {JSON.stringify(result)}
+                              </MaterialUI.Typography>
+                          </React.Fragment>
                         )
+
+
                         return (
-                            <MaterialUI.ListItem disablePadding key={result.name}>
+                            <MaterialUI.ListItem disablePadding key='{name}-{value}'>
                                 <MaterialUI.ListItemButton>
                                     <MaterialUI.ListItemIcon>
                                         {icon}
                                     </MaterialUI.ListItemIcon>
-                                    <MaterialUI.ListItemText primary={msg} secondary={details} color={color} />
+                                    <MaterialUI.ListItemText primary={msg} />
                                 </MaterialUI.ListItemButton>
                             </MaterialUI.ListItem>
                         );
                     });
 
                     output.push(
-                        <li key={`section-${key}`}>
+                        <li key={`section-${name}`}>
                             <ul>
-                                <MaterialUI.ListSubheader>{key}</MaterialUI.ListSubheader>
+                                <MaterialUI.ListSubheader>{name}</MaterialUI.ListSubheader>
                                 {results_components}
                             </ul>
                         </li>
-                        );
-                }
+                    );
+                });
 
                 return (
                     <MaterialUI.Box sx={{bgcolor: 'background.paper'}} >
@@ -91,7 +90,6 @@
             }
 
             async function prepare_pyodide(app) {
-                console.log(app);
                 const pyodide = await loadPyodide({
                     indexURL: "https://cdn.jsdelivr.net/pyodide/v0.20.0/full/",
                     stdout: (message) => {app.setState({msg: message, progress: true})}
@@ -111,7 +109,7 @@
                 constructor(props) {
                     super(props);
                     this.state = {
-                        results: [],
+                        results: new Map(),
                         selectedFile: null,
                         msg: DEFAULT_MSG,
                         progress: false,
@@ -125,28 +123,27 @@
                 handleComputeCallback(pyodide, state) {
                     if (!state.selectedFile) return;
                     const reader = new FileReader();
-                    reader.onloadend = function(e){
+                    reader.onloadend = e => {
                         const app = this;
                         window.fileData = JSON.parse(e.target.result);
-                        const channels = pyodide.runPython(`
+                        const result = pyodide.runPython(`
                             from js import fileData
                             data = fileData.to_py()
                             ws = pyhf.Workspace(data)
-                            ws.channels
+                            {'channels': ws.channels, 'samples': ws.samples, 'modifiers': ws.modifiers}
                         `);
-
-                        this.setState({results: channels, msg: `Results for ${state.selectedFile}`});
-                    };
+                        this.setState({results: result.toJs(), msg: `Results for ${state.selectedFile.name}`, progress: false});
+                    }
                     reader.readAsText(state.selectedFile);
                 }
 
                 handleCompute() {
                     if (!this.state.selectedFile) {
-                        this.setState({"results": [], msg: DEFAULT_MSG});
+                        this.setState({"results": new Map(), msg: DEFAULT_MSG});
                         alert(`Please select a file!`);
                         return;
                     }
-                    this.setState({"results": [], msg: "Loading...", progress: true});
+                    this.setState({"results": new Map(), msg: "Loading...", progress: true});
                     this.pyodide_promise.then(pyodide => {
                         this.handleComputeCallback(pyodide, this.state);
                     });
@@ -161,6 +158,7 @@
                               variant="contained"
                               component="label"
                               sx={{flexGrow: 1}}
+                              disabled={this.state.progress}
                             >
                               Upload File
                               <input
@@ -169,7 +167,7 @@
                                 hidden
                               />
                             </MaterialUI.Button>
-                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large">Compute!</MaterialUI.Button>
+                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
                         </MaterialUI.Stack>
                         <MaterialUI.Paper elevation={3}>
                             <MaterialUI.Box sx={{ p: 2 }}>
@@ -178,7 +176,7 @@
                                 </MaterialUI.Typography>
                                 {this.state.progress && <MaterialUI.LinearProgress />}
                             </MaterialUI.Box>
-                            <Results results={this.state.results} />
+                          <Results results={this.state.results} />
                         </MaterialUI.Paper>
                         </MaterialUI.Box>
                     );
