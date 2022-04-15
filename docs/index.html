@@ -335,7 +335,6 @@
                                                 label="Signal Yields"
                                                 helperText="e.g. 5.0"
                                                 variant="outlined"
-                                                autoFocus={true}
                                                 onInput={(e) => this.setState({signal: Math.max(e.target.min, e.target.value)})}
                                                 sx={{flexGrow: 3, m: 1, width: '25ch'}}
                                                 value={this.state.signal}
@@ -347,7 +346,6 @@
                                                 label="Background Yields"
                                                 helperText="e.g. 10.0"
                                                 variant="outlined"
-                                                autoFocus={true}
                                                 onInput={(e) => this.setState({background: Math.max(e.target.min, e.target.value)})}
                                                 sx={{flexGrow: 3, m: 1}}
                                                 value={this.state.background}
@@ -359,7 +357,6 @@
                                                 label="Background Uncertainty"
                                                 helperText="absolute uncertainty, e.g. 1.0"
                                                 variant="outlined"
-                                                autoFocus={true}
                                                 onInput={(e) => this.setState({uncert: Math.max(e.target.min, e.target.value)})}
                                                 sx={{flexGrow: 3, m: 1}}
                                                 value={this.state.uncert}
