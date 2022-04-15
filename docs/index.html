@@ -171,7 +171,11 @@
                         selectedFile: null,
                         msg: DEFAULT_MSG,
                         progress: false,
-                        tab: "uploadFile",
+                        tab: "simpleModel",
+                        signal: 5.0,
+                        background: 10.0,
+                        uncert: 1.0,
+                        observed: 12.5,
                     };
                 }
 
@@ -191,7 +195,7 @@
                     this.setState({selectedFile: selectedFile});
                 }
 
-                handleInspect() {
+                handleInspectUploadFile() {
                     if (!this.state.spec) {
                         alert(`Please provide a workspace specification!`);
                         return;
@@ -210,7 +214,20 @@
                   });
                 }
 
-                handleCompute() {
+                handleInspectSimpleModel() {
+                    this.setState({"results": new Map(), msg: "Inspecting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        const result = pyodide.runPython(`
+                            model = pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}])
+                            {'channels': model.config.channels, 'samples': model.config.samples, 'modifiers': model.config.modifiers}
+                        `);
+                        this.setState({results: result.toJs(), msg: `Results for pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}])`, progress: false});
+                  });
+                }
+
+
+                handleComputeUploadFile() {
                     if (!this.state.spec) {
                         alert(`Please provide a workspace specification!`);
                         return;
@@ -232,6 +249,38 @@
                   });
                 }
 
+                handleComputeSimpleModel() {
+                    this.setState({"results": new Map(), msg: "Computing...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        const result = pyodide.runPython(`
+                            model = pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}])
+                            data = [${this.state.observed}] + model.config.auxdata
+                            result = pyhf.infer.hypotest(1.0, data, model, return_expected_set=True)
+                            {'CLs_obs': [tensorlib.tolist(result[0])], 'CLs_exp': [tensorlib.tolist(tensor) for tensor in result[-1]]}
+                        `);
+                        this.setState({results: result.toJs(), msg: `Results for pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}]) with observed=[${this.state.observed}]`, progress: false});
+                  });
+                }
+
+
+                handleInspect() {
+                    if (this.state.tab == "uploadFile")
+                        return this.handleInspectUploadFile()
+
+                    if (this.state.tab == "simpleModel")
+                        return this.handleInspectSimpleModel()
+                }
+
+                handleCompute() {
+                    if (this.state.tab == "uploadFile")
+                        return this.handleComputeUploadFile()
+
+                    if (this.state.tab == "simpleModel")
+                        return this.handleComputeSimpleModel()
+                }
+
+
                 render() {
                     return (
                         <MyThemeProvider>
@@ -243,11 +292,11 @@
                                         <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
                                             <MaterialUI.Tabs sx={{flexGrow: 2}} value={this.state.tab} onChange={(e, v) => {this.setState({tab: v})}} aria-label="basic tabs example">
                                               <MaterialUI.Tab label="Workspace File" value="uploadFile" />
-                                              <MaterialUI.Tab label="Simple Models" value="simpleModel" disabled />
+                                              <MaterialUI.Tab label="Simple Models" value="simpleModel" />
                                               <MaterialUI.Tab label="Text Input" value="textInput" disabled />
                                             </MaterialUI.Tabs>
-                                            <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || !this.state.spec}>Inspect!</MaterialUI.Button>
-                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || !this.state.spec}>Compute!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || (!this.state.spec && this.state.tab == "uploadFile")}>Inspect!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || (!this.state.spec && this.state.tab == "uploadFile")}>Compute!</MaterialUI.Button>
 
                                         </MaterialUI.Stack>
                                     </MaterialUI.Grid>
@@ -262,7 +311,56 @@
                                                 </MaterialUI.Typography>
                                             </MaterialUI.Stack>
                                         </TabPanel>
-                                        <TabPanel value={this.state.tab} index="simpleModel">Simple Model</TabPanel>
+                                        <TabPanel value={this.state.tab} index="simpleModel">
+                                            <MaterialUI.TextField
+                                                id="signal-yields"
+                                                label="Signal Yields"
+                                                helperText="e.g. 5.0"
+                                                variant="outlined"
+                                                autoFocus={true}
+                                                onInput={(e) => this.setState({signal: Math.max(e.target.min, e.target.value)})}
+                                                sx={{flexGrow: 3, m: 1, width: '25ch'}}
+                                                value={this.state.signal}
+                                                inputProps={{ min: 0 }}
+                                                type="number"
+                                            />
+                                            <MaterialUI.TextField
+                                                id="background-yields"
+                                                label="Background Yields"
+                                                helperText="e.g. 10.0"
+                                                variant="outlined"
+                                                autoFocus={true}
+                                                onInput={(e) => this.setState({background: Math.max(e.target.min, e.target.value)})}
+                                                sx={{flexGrow: 3, m: 1}}
+                                                value={this.state.background}
+                                                inputProps={{ min: 0 }}
+                                                type="number"
+                                            />
+                                            <MaterialUI.TextField
+                                                id="background-uncertainty"
+                                                label="Background Uncertainty"
+                                                helperText="absolute uncertainty, e.g. 1.0"
+                                                variant="outlined"
+                                                autoFocus={true}
+                                                onInput={(e) => this.setState({uncert: Math.max(e.target.min, e.target.value)})}
+                                                sx={{flexGrow: 3, m: 1}}
+                                                value={this.state.uncert}
+                                                inputProps={{ min: 0 }}
+                                                type="number"
+                                            />
+                                            <MaterialUI.TextField
+                                                id="observed-data"
+                                                label="Observations"
+                                                helperText="e.g. 12.5"
+                                                variant="filled"
+                                                autoFocus={true}
+                                                onInput={(e) => this.setState({uncert: Math.max(e.target.min, e.target.value)})}
+                                                sx={{flexGrow: 3, m: 1}}
+                                                value={this.state.observed}
+                                                inputProps={{ min: 0 }}
+                                                type="number"
+                                            />
+                                        </TabPanel>
                                         <TabPanel value={this.state.tab} index="textInput">Text Input</TabPanel>
                                     </MaterialUI.Grid>
                                     <MaterialUI.Grid item xs={12}>
