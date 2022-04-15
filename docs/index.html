@@ -1,0 +1,197 @@
+<html>
+    <head>
+        <meta charset="utf-8" name="viewport" content="initial-scale=1, width=device-width"/>
+        <script src="https://cdn.jsdelivr.net/pyodide/v0.20.0/full/pyodide.js" crossorigin></script>
+        <!-- Production -->
+        <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+        <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+        <script src="https://unpkg.com/@mui/material@v5.6.1/umd/material-ui.production.min.js" crossorigin></script>
+        <!-- Development
+        <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+        <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+        <script src="https://unpkg.com/@mui/material@v5.6.1/umd/material-ui.development.js" crossorigin></script>
+        ->
+
+        <!-- Can remove this for a pre-processor -->
+        <script src="https://unpkg.com/babel-standalone@6/babel.min.js" crossorigin></script>
+        <!-- Fonts to support Material Design -->
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+        <!-- Icons to support Material Design -->
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    </head>
+
+    <body>
+        <div id="root"> Loading... </div>
+        <script type="text/babel">
+            const DEFAULT_MSG = "Pick a HistFactory JSON workspace to review. Runs entirely in your browser using React, MaterialUI, and Pyodide.";
+            function Heading(props) {
+                return (
+                    <MaterialUI.Box sx={{ flexGrow: 1, mb: 2 }}>
+                        <MaterialUI.AppBar position="static">
+                            <MaterialUI.Toolbar>
+                            <MaterialUI.Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                                Try pyhf today!
+                            </MaterialUI.Typography>
+                            <MaterialUI.Button href="https://scikit-hep.org/pyhf" color="inherit">pyhf documentation</MaterialUI.Button>
+                            <MaterialUI.Button href="https://github.com/kratsg/try-pyhf" color="inherit">Source</MaterialUI.Button>
+                            </MaterialUI.Toolbar>
+                        </MaterialUI.AppBar>
+                    </MaterialUI.Box>
+                );
+            }
+
+            function Results(props) {
+                const output = [];
+                for (const key in props.results) {
+                    const inner_results = props.results[key];
+                    const results_components = inner_results.map(result => {
+                        const details = result.state === false ? <span dangerouslySetInnerHTML={{__html: result.err_msg }} />: null;
+                        const color = result.state === false ? 'error' : (result.state === true ?  'success' : 'warning');
+                        const icon = <MaterialUI.Icon color={color}>{result.state === false ? 'error' : (result.state === true ? 'check_circle' : 'warning' )}</MaterialUI.Icon>;
+                        const msg = (
+                            <React.Fragment>
+                                <MaterialUI.Typography
+                                    sx={{ display: 'inline' }}
+                                    component="span"
+                                    variant="body2"
+                                    color="text.primary"
+                                >
+                                    {result.name + ": "}
+                                </MaterialUI.Typography>
+                                {result.description}
+                            </React.Fragment>
+                        )
+                        return (
+                            <MaterialUI.ListItem disablePadding key={result.name}>
+                                <MaterialUI.ListItemButton>
+                                    <MaterialUI.ListItemIcon>
+                                        {icon}
+                                    </MaterialUI.ListItemIcon>
+                                    <MaterialUI.ListItemText primary={msg} secondary={details} color={color} />
+                                </MaterialUI.ListItemButton>
+                            </MaterialUI.ListItem>
+                        );
+                    });
+
+                    output.push(
+                        <li key={`section-${key}`}>
+                            <ul>
+                                <MaterialUI.ListSubheader>{key}</MaterialUI.ListSubheader>
+                                {results_components}
+                            </ul>
+                        </li>
+                        );
+                }
+
+                return (
+                    <MaterialUI.Box sx={{bgcolor: 'background.paper'}} >
+                        <MaterialUI.List subheader={<li />} overflow='auto'>{output}</MaterialUI.List>
+                    </MaterialUI.Box>
+                );
+            }
+
+            async function prepare_pyodide(app) {
+                console.log(app);
+                const pyodide = await loadPyodide({
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.20.0/full/",
+                    stdout: (message) => {app.setState({msg: message, progress: true})}
+                });
+
+                await pyodide.loadPackage('micropip', (message) => {app.setState({msg: message, progress: true})});
+                await pyodide.runPythonAsync(`
+                    import micropip
+                    await micropip.install(["setuptools", "pyhf"])
+                    import pyhf
+                `);
+                app.setState({msg: DEFAULT_MSG, progress: false});
+                return pyodide;
+            }
+
+            class App extends React.Component {
+                constructor(props) {
+                    super(props);
+                    this.state = {
+                        results: [],
+                        selectedFile: null,
+                        msg: DEFAULT_MSG,
+                        progress: false,
+                    };
+                }
+
+                componentDidMount() {
+                    this.pyodide_promise = prepare_pyodide(this);
+                }
+
+                handleComputeCallback(pyodide, state) {
+                    if (!state.selectedFile) return;
+                    const reader = new FileReader();
+                    reader.onloadend = function(e){
+                        const app = this;
+                        window.fileData = JSON.parse(e.target.result);
+                        const channels = pyodide.runPython(`
+                            from js import fileData
+                            data = fileData.to_py()
+                            ws = pyhf.Workspace(data)
+                            ws.channels
+                        `);
+
+                        this.setState({results: channels, msg: `Results for ${state.selectedFile}`});
+                    };
+                    reader.readAsText(state.selectedFile);
+                }
+
+                handleCompute() {
+                    if (!this.state.selectedFile) {
+                        this.setState({"results": [], msg: DEFAULT_MSG});
+                        alert(`Please select a file!`);
+                        return;
+                    }
+                    this.setState({"results": [], msg: "Loading...", progress: true});
+                    this.pyodide_promise.then(pyodide => {
+                        this.handleComputeCallback(pyodide, this.state);
+                    });
+                }
+
+                render() {
+                    return (
+                        <MaterialUI.Box>
+                        <Heading />
+                        <MaterialUI.Stack direction="row" spacing={2} alignItems="top" sx={{ m: 1, mb: 3 }} >
+                            <MaterialUI.Button
+                              variant="contained"
+                              component="label"
+                              sx={{flexGrow: 1}}
+                            >
+                              Upload File
+                              <input
+                                type="file"
+                                onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
+                                hidden
+                              />
+                            </MaterialUI.Button>
+                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large">Compute!</MaterialUI.Button>
+                        </MaterialUI.Stack>
+                        <MaterialUI.Paper elevation={3}>
+                            <MaterialUI.Box sx={{ p: 2 }}>
+                                <MaterialUI.Typography variant="body1" component="div">
+                                    {this.state.msg}
+                                </MaterialUI.Typography>
+                                {this.state.progress && <MaterialUI.LinearProgress />}
+                            </MaterialUI.Box>
+                            <Results results={this.state.results} />
+                        </MaterialUI.Paper>
+                        </MaterialUI.Box>
+                    );
+                }
+            }
+
+            function main() {
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<App />);
+            }
+
+            main();
+
+        </script>
+    </body>
+</html>
