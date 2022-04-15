@@ -103,6 +103,7 @@
                     import micropip
                     await micropip.install(["setuptools", "pyhf"])
                     import pyhf
+                    tensorlib, _ = pyhf.get_backend()
                 `);
                 app.setState({msg: DEFAULT_MSG, progress: false});
                 return pyodide;
@@ -166,6 +167,7 @@
                     super(props);
                     this.state = {
                         results: new Map(),
+                        spec: null,
                         selectedFile: null,
                         msg: DEFAULT_MSG,
                         progress: false,
@@ -177,33 +179,57 @@
                     this.pyodide_promise = prepare_pyodide(this);
                 }
 
-                handleComputeCallback(pyodide, state) {
-                    if (!state.selectedFile) return;
+                handleFileChange = (e) => {
+                    const selectedFile = e.target.files[0];
+                    if (!selectedFile) return;
+
                     const reader = new FileReader();
                     reader.onloadend = e => {
-                        const app = this;
-                        window.fileData = JSON.parse(e.target.result);
+                        this.setState({spec: JSON.parse(e.target.result), progress: false, msg: `Loaded ${this.state.selectedFile.name}`});
+                    }
+                    reader.readAsText(selectedFile);
+                    this.setState({selectedFile: selectedFile});
+                }
+
+                handleInspect() {
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
+                        return;
+                    }
+                    this.setState({"results": new Map(), msg: "Inspecting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        window.spec = this.state.spec;
                         const result = pyodide.runPython(`
-                            from js import fileData
-                            data = fileData.to_py()
-                            ws = pyhf.Workspace(data)
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
                             {'channels': ws.channels, 'samples': ws.samples, 'modifiers': ws.modifiers}
                         `);
-                        this.setState({results: result.toJs(), msg: `Results for ${state.selectedFile.name}`, progress: false});
-                    }
-                    reader.readAsText(state.selectedFile);
+                        this.setState({results: result.toJs(), msg: `Results for ${this.state.selectedFile.name}`, progress: false});
+                  });
                 }
 
                 handleCompute() {
-                    if (!this.state.selectedFile) {
-                        this.setState({"results": new Map(), msg: DEFAULT_MSG});
-                        alert(`Please select a file!`);
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
                         return;
                     }
-                    this.setState({"results": new Map(), msg: "Loading...", progress: true});
+                    this.setState({"results": new Map(), msg: "Computing...", progress: true});
+
                     this.pyodide_promise.then(pyodide => {
-                        this.handleComputeCallback(pyodide, this.state);
-                    });
+                        window.spec = this.state.spec;
+                        const result = pyodide.runPython(`
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
+                            model = ws.model()
+                            data = ws.data(model)
+                            result = pyhf.infer.hypotest(1.0, data, model, return_expected_set=True)
+                            {'CLs_obs': [tensorlib.tolist(result[0])], 'CLs_exp': [tensorlib.tolist(tensor) for tensor in result[-1]]}
+                        `);
+                        this.setState({results: result.toJs(), msg: `Results for ${this.state.selectedFile.name}`, progress: false});
+                  });
                 }
 
                 render() {
@@ -220,23 +246,16 @@
                                               <MaterialUI.Tab label="Simple Models" value="simpleModel" disabled />
                                               <MaterialUI.Tab label="Text Input" value="textInput" disabled />
                                             </MaterialUI.Tabs>
-                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress}>Compute!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || !this.state.spec}>Inspect!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || !this.state.spec}>Compute!</MaterialUI.Button>
+
                                         </MaterialUI.Stack>
                                     </MaterialUI.Grid>
                                     <MaterialUI.Grid item xs={12}>
                                         <TabPanel value={this.state.tab} index="uploadFile">
                                             <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
-                                                <MaterialUI.Button
-                                                  variant="contained"
-                                                  component="label"
-                                                  disabled={this.state.progress}
-                                                >
-                                                  Upload File
-                                                  <input
-                                                    type="file"
-                                                    onChange={(e) => this.setState({selectedFile: e.target.files[0]})}
-                                                    hidden
-                                                  />
+                                                <MaterialUI.Button variant="contained" component="label" disabled={this.state.progress}>
+                                                  Upload File <input type="file" onChange={this.handleFileChange} hidden />
                                                 </MaterialUI.Button>
                                                 <MaterialUI.Typography variant="body1" component="div" sx={{flexGrow: 2}}>
                                                     {this.state.selectedFile ? this.state.selectedFile.name : 'Select a file to get started.'}
