@@ -46,6 +46,19 @@
             function Results(props) {
                 const output = [];
 
+                if(typeof props.results === 'string'){
+                    return (
+                        <MaterialUI.Box sx={{bgcolor: 'background.paper'}}>
+                            <img
+                              src={`${props.results}`}
+                              srcSet={`${props.results} 2x`}
+                              alt="Plot of the workspace"
+                              loading="lazy"
+                            />
+                        </MaterialUI.Box>
+                    )
+                }
+
                 props.results.forEach((value, name) => {
                     const results_components = value.map(result => {
                         const icon = <MaterialUI.Icon>{name == 'channels' ? 'looks_one' : (name == 'samples' ? 'looks_two' : 'looks_3')}</MaterialUI.Icon>;
@@ -101,9 +114,105 @@
                 await pyodide.loadPackage('micropip', (message) => {app.setState({msg: message, progress: true})});
                 await pyodide.runPythonAsync(`
                     import micropip
-                    await micropip.install(["setuptools", "pyhf"])
+                    await micropip.install(["setuptools", "pyhf", "matplotlib"])
                     import pyhf
+                    # below is for modifier grid
+                    from collections import defaultdict
+                    import matplotlib as mpl
+                    import matplotlib.pyplot as plt
+                    import numpy as np
+                    import io, base64
                     tensorlib, _ = pyhf.get_backend()
+
+                    def modifier_grid(model: pyhf.pdf.Model) -> None:
+                        modifier_dict = defaultdict(list)
+                        for channel in model.spec["channels"]:
+                            for sample in channel["samples"]:
+                                for modifier in sample["modifiers"]:
+                                    modifier_dict[
+                                        (channel["name"], sample["name"], modifier["name"])
+                                    ].append(modifier["type"])
+
+                        NUM_CHANNELS = len(model.config.channels)
+                        NUM_SAMPLES = len(model.config.samples)
+                        NUM_PARAMS = len(model.config.par_order)
+
+                        NUM_CATEGORIES = 8  # no modifier + 6 modifier categories
+
+                        # build 2d grid for each sample
+                        grids = [np.zeros(shape=(NUM_CHANNELS, NUM_PARAMS)) for _ in model.config.samples]
+                        for i, sample in enumerate(model.config.samples):
+                            for j, chan in enumerate(model.config.channels):
+                                for k, par in enumerate(model.config.par_order):
+                                    modifiers = modifier_dict[(chan, sample, par)]
+                                    # define categories
+                                    if modifiers == []:
+                                        val = 0
+                                    elif modifiers == ["normsys"]:
+                                        val = 1
+                                    elif modifiers == ["histosys"]:
+                                        val = 2
+                                    elif sorted(modifiers) == ["histosys", "normsys"]:
+                                        val = 3
+                                    elif modifiers == ["staterror"]:
+                                        val = 4
+                                    elif modifiers == ["lumi"]:
+                                        val = 5
+                                    elif modifiers == ["normfactor"]:
+                                        val = 6
+                                    elif modifiers == ["shapesys"]:
+                                        val = 7
+                                    else:
+                                        raise NotImplementedError(chan, par, modifiers)
+                                    grids[i][j, k] = val
+
+                        cbrewer = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628']
+
+                        # colors of categories
+                        cmap = mpl.colors.ListedColormap(
+                            ['#ffffff',cbrewer[0],cbrewer[4],cbrewer[2],cbrewer[5],cbrewer[1],cbrewer[3],cbrewer[6]]
+                        )
+                        bounds = np.arange(-0.5, NUM_CATEGORIES + 0.5)
+                        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+                        # very rough heuristics for figure size, need to be tuned
+                        fig_width = 3 + NUM_PARAMS / 3.8
+                        fig_height = 3 + (NUM_CHANNELS * NUM_SAMPLES) / 3.2
+                        fig, ax = plt.subplots(
+                            NUM_SAMPLES,
+                            sharex=True,
+                            constrained_layout=True,
+                            figsize=(fig_width, fig_height),
+                        )
+
+                        for i, sample in enumerate(model.config.samples):
+                            im = ax[i].imshow(grids[i], cmap=cmap, norm=norm)
+                            ax[i].set_title(sample)
+
+                            ax[i].set_xticks(np.arange(NUM_PARAMS))
+                            ax[i].set_yticks(np.arange(NUM_CHANNELS))
+                            ax[i].set_xticklabels(model.config.par_order)
+                            ax[i].set_yticklabels(model.config.channels)
+                            for tick in ax[i].get_xticklabels():
+                                tick.set_rotation(45)
+                                tick.set_horizontalalignment("right")
+
+                        # labels for categories
+                        ticks = {
+                            0: "none",
+                            1: "normsys",
+                            2: "histosys",
+                            3: "normsys + histosys",
+                            4: "staterror",
+                            5: "lumi",
+                            6: "normfactor",
+                            7: "shapesys",
+                        }
+                        formatter = plt.FuncFormatter(lambda val, _: ticks[val])
+                        _ = fig.colorbar(
+                            im, ax=ax.ravel().tolist(), ticks=np.arange(NUM_CATEGORIES), format=formatter
+                        )
+                        return fig, ax
                 `);
                 app.setState({msg: DEFAULT_MSG, progress: false});
                 return pyodide;
@@ -307,6 +416,24 @@
                   });
                 }
 
+                handlePlotSimpleModel() {
+                    this.setState({"results": new Map(), msg: "Plotting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        const result = pyodide.runPython(`
+                            model = pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}])
+                            fig, ax = modifier_grid(model)
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='png')
+                            buf.seek(0)
+                            img_str = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('UTF-8')}"
+                            img_str
+                        `);
+                        this.setState({results: result, msg: `Plot for pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}]) with observed=[${this.state.observed}]`, progress: false});
+                  });
+                }
+
+
                 handleInspect() {
                     if (this.state.tab == "uploadFile")
                         return this.handleInspectUploadFile()
@@ -329,6 +456,16 @@
                         return this.handleComputeTextInput()
                 }
 
+                handlePlot() {
+                    if (this.state.tab == "uploadFile")
+                        return this.handlePlotUploadFile()
+
+                    if (this.state.tab == "simpleModel")
+                        return this.handlePlotSimpleModel()
+
+                    if (this.state.tab == "textInput")
+                        return this.handlePlotTextInput()
+                }
 
                 render() {
                     let icon_close = ''
@@ -361,6 +498,7 @@
                                             </MaterialUI.Tabs>
                                             <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || (!this.state.selectedFile && this.state.tab == "uploadFile") || (!this.state.spec && this.state.tab == "textInput")}>Inspect!</MaterialUI.Button>
                                             <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || (!this.state.selectedFile && this.state.tab == "uploadFile") || (!this.state.spec && this.state.tab == "textInput")}>Compute!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handlePlot()} variant="contained" size="large" disabled={this.state.progress || (!this.state.selectedFile && this.state.tab == "uploadFile") || (!this.state.spec && this.state.tab == "textInput")}>Plot!</MaterialUI.Button>
 
                                         </MaterialUI.Stack>
                                     </MaterialUI.Grid>
