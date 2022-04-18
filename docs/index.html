@@ -189,7 +189,7 @@
 
                     const reader = new FileReader();
                     reader.onloadend = e => {
-                        this.setState({spec: JSON.parse(e.target.result), progress: false, msg: `Loaded ${this.state.selectedFile.name}`});
+                        this.setState({spec: e.target.result, progress: false, msg: `Loaded ${this.state.selectedFile.name}`});
                     }
                     reader.readAsText(selectedFile);
                     this.setState({selectedFile: selectedFile});
@@ -203,7 +203,7 @@
                     this.setState({"results": new Map(), msg: "Inspecting...", progress: true});
 
                     this.pyodide_promise.then(pyodide => {
-                        window.spec = this.state.spec;
+                        window.spec = JSON.parse(this.state.spec);
                         const result = pyodide.runPython(`
                             from js import spec
                             spec = spec.to_py()
@@ -227,6 +227,25 @@
                   });
                 }
 
+                handleInspectTextInput() {
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
+                        return;
+                    }
+                    this.setState({"results": new Map(), msg: "Inspecting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        window.spec = JSON.parse(this.state.spec);
+                        const result = pyodide.runPython(`
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
+                            {'channels': ws.channels, 'samples': ws.samples, 'modifiers': ws.modifiers}
+                        `);
+                        delete window.spec;
+                        this.setState({results: result.toJs(), msg: 'Results for user-provided input', progress: false});
+                  });
+                }
 
                 handleComputeUploadFile() {
                     if (!this.state.spec) {
@@ -236,7 +255,7 @@
                     this.setState({"results": new Map(), msg: "Computing...", progress: true});
 
                     this.pyodide_promise.then(pyodide => {
-                        window.spec = this.state.spec;
+                        window.spec = JSON.parse(this.state.spec);
                         const result = pyodide.runPython(`
                             from js import spec
                             spec = spec.to_py()
@@ -265,6 +284,28 @@
                   });
                 }
 
+                handleComputeTextInput() {
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
+                        return;
+                    }
+                    this.setState({"results": new Map(), msg: "Computing...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        window.spec = JSON.parse(this.state.spec);
+                        const result = pyodide.runPython(`
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
+                            model = ws.model()
+                            data = ws.data(model)
+                            result = pyhf.infer.hypotest(1.0, data, model, return_expected_set=True)
+                            {'CLs_obs': [tensorlib.tolist(result[0])], 'CLs_exp': [tensorlib.tolist(tensor) for tensor in result[-1]]}
+                        `);
+                        delete window.spec;
+                        this.setState({results: result.toJs(), msg: 'Results for user-provided input', progress: false});
+                  });
+                }
 
                 handleInspect() {
                     if (this.state.tab == "uploadFile")
@@ -272,6 +313,9 @@
 
                     if (this.state.tab == "simpleModel")
                         return this.handleInspectSimpleModel()
+
+                    if (this.state.tab == "textInput")
+                        return this.handleInspectTextInput()
                 }
 
                 handleCompute() {
@@ -280,6 +324,9 @@
 
                     if (this.state.tab == "simpleModel")
                         return this.handleComputeSimpleModel()
+
+                    if (this.state.tab == "textInput")
+                        return this.handleComputeTextInput()
                 }
 
 
@@ -310,10 +357,10 @@
                                             <MaterialUI.Tabs sx={{flexGrow: 2}} value={this.state.tab} onChange={(e, v) => {this.setState({tab: v})}} aria-label="basic tabs example">
                                               <MaterialUI.Tab label="Workspace File" value="uploadFile" />
                                               <MaterialUI.Tab label="Simple Models" value="simpleModel" />
-                                              <MaterialUI.Tab label="Text Input" value="textInput" disabled />
+                                              <MaterialUI.Tab label="Text Input" value="textInput" />
                                             </MaterialUI.Tabs>
-                                            <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || (!this.state.spec && this.state.tab == "uploadFile")}>Inspect!</MaterialUI.Button>
-                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || (!this.state.spec && this.state.tab == "uploadFile")}>Compute!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleInspect()} variant="contained" size="large" disabled={this.state.progress || (!this.state.selectedFile && this.state.tab == "uploadFile") || (!this.state.spec && this.state.tab == "textInput")}>Inspect!</MaterialUI.Button>
+                                            <MaterialUI.Button onClick={() => this.handleCompute()} variant="contained" size="large" disabled={this.state.progress || (!this.state.selectedFile && this.state.tab == "uploadFile") || (!this.state.spec && this.state.tab == "textInput")}>Compute!</MaterialUI.Button>
 
                                         </MaterialUI.Stack>
                                     </MaterialUI.Grid>
@@ -376,7 +423,22 @@
                                                 type="number"
                                             />
                                         </TabPanel>
-                                        <TabPanel value={this.state.tab} index="textInput">Text Input</TabPanel>
+                                        <TabPanel value={this.state.tab} index="textInput">
+                                            <MaterialUI.Stack direction="row" spacing={2} alignItems="center" sx={{ m: 1, mb: 3 }} >
+                                                <MaterialUI.TextField
+                                                    id="workspace-text"
+                                                    label="Workspace"
+                                                    helperText="spec.json"
+                                                    variant="filled"
+                                                    autoFocus={true}
+                                                    sx={{flexGrow: 1, m: 1}}
+                                                    value={this.state.spec}
+                                                    multiline
+                                                    minRows={3}
+                                                    onInput={(e) => this.setState({spec: e.target.value})}
+                                                />
+                                            </MaterialUI.Stack>
+                                        </TabPanel>
                                     </MaterialUI.Grid>
                                     <MaterialUI.Grid item xs={12}>
                                         <MaterialUI.Paper elevation={3}>
