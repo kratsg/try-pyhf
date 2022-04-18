@@ -48,7 +48,7 @@
 
                 if(typeof props.results === 'string'){
                     return (
-                        <MaterialUI.Box sx={{bgcolor: 'background.paper'}}>
+                        <MaterialUI.Box sx={{bgcolor: 'background.paper', width: 1}}>
                             <img
                               src={`${props.results}`}
                               srcSet={`${props.results} 2x`}
@@ -176,13 +176,14 @@
                         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 
                         # very rough heuristics for figure size, need to be tuned
-                        fig_width = 3 + NUM_PARAMS / 3.8
-                        fig_height = 3 + (NUM_CHANNELS * NUM_SAMPLES) / 3.2
+                        fig_width = 5 + NUM_PARAMS / 3.8
+                        fig_height = 5 + (NUM_CHANNELS * NUM_SAMPLES) / 3.2
                         fig, ax = plt.subplots(
                             NUM_SAMPLES,
                             sharex=True,
                             constrained_layout=True,
                             figsize=(fig_width, fig_height),
+                            dpi=200,
                         )
 
                         for i, sample in enumerate(model.config.samples):
@@ -416,6 +417,32 @@
                   });
                 }
 
+                handlePlotUploadFile() {
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
+                        return;
+                    }
+                    this.setState({"results": new Map(), msg: "Plotting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        window.spec = JSON.parse(this.state.spec);
+                        const result = pyodide.runPython(`
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
+                            model = ws.model()
+                            fig, ax = modifier_grid(model)
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='png')
+                            buf.seek(0)
+                            img_str = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('UTF-8')}"
+                            img_str
+                        `);
+                        delete window.spec;
+                        this.setState({results: result, msg: `Plot for ${this.state.selectedFile.name}`, progress: false});
+                  });
+                }
+
                 handlePlotSimpleModel() {
                     this.setState({"results": new Map(), msg: "Plotting...", progress: true});
 
@@ -430,6 +457,32 @@
                             img_str
                         `);
                         this.setState({results: result, msg: `Plot for pyhf.simplemodels.uncorrelated_background([${this.state.signal}], [${this.state.background}], [${this.state.uncert}]) with observed=[${this.state.observed}]`, progress: false});
+                  });
+                }
+
+                handlePlotTextInput() {
+                    if (!this.state.spec) {
+                        alert(`Please provide a workspace specification!`);
+                        return;
+                    }
+                    this.setState({"results": new Map(), msg: "Plotting...", progress: true});
+
+                    this.pyodide_promise.then(pyodide => {
+                        window.spec = JSON.parse(this.state.spec);
+                        const result = pyodide.runPython(`
+                            from js import spec
+                            spec = spec.to_py()
+                            ws = pyhf.Workspace(spec)
+                            model = ws.model()
+                            fig, ax = modifier_grid(model)
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='png')
+                            buf.seek(0)
+                            img_str = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('UTF-8')}"
+                            img_str
+                        `);
+                        delete window.spec;
+                        this.setState({results: result.toJs(), msg: 'Plot for user-provided input', progress: false});
                   });
                 }
 
